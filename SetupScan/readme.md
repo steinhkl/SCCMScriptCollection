@@ -1,4 +1,4 @@
-This Script uses the Windows Setup built in Scan capabilities to scan a computer for conflicting Applications.
+This Script uses the Windows Setup built in Scan capabilities to scan a computer for conflicting Applications, Hardware, Drivers and other.
 
 - It will copy the resulting \~Panther files to a destination of your choosing.
 - It creates a Log file containing the Computername as well as the Setup exit code.
