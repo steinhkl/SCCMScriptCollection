@@ -18,7 +18,7 @@
 # Root LogPath
 $strLogPath = "\\LOGSERVER\IPU-Logs"
 # Root Directory where you store your Install Medias:
-$strRootSetupPath = "\\FILESERVER\Steinhauer.Klaus"
+$strRootSetupPath = "\\FILESERVER\InstallMedia"
 # OS Version 
 $strOSVersion = "Win10v1607CB"
 # Do not Modify below this line
