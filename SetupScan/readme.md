@@ -7,7 +7,7 @@ The Script SetupScan.ps1 uses the Windows Setup built in Scan capabilities to sc
 
 The Script relies on a naming scheme for the extracted ISOs of Windows 10 which should look like this:
 
-Windows10_[RELEASE]_[BRANCH]_[ARCHITECTURE]_[LANGUAGE]
+Windows10_[RELEASE]\_[BRANCH]\_[ARCHITECTURE]\_[LANGUAGE]
 
 Example: Windows10_16.07_CB_x64_EN
 
