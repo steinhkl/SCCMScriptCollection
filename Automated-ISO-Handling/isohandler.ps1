@@ -102,51 +102,59 @@ PARAM
     [Parameter(ParameterSetName="TSMod", Mandatory=$true, Position = 12, Helpmessage = "Please enter your SiteCode.")]
     [ValidateNotNullOrEmpty()] [string] $SiteCode,
     [Parameter(ParameterSetName="TSMod", Mandatory=$true, Position = 13, Helpmessage = "Please enter your Task Sequence ID.")]
-    [ValidatePattern('[A-Z0-9]{3}[A-F0-9]{5}')] [string] $TaskSequenceID
+    [ValidatePattern('[A-Z0-9]{3}[A-F0-9]{5}')] [string] $TaskSequenceID,
+    [Parameter(ParameterSetName="TSMod", Mandatory=$false, Position = 14, Helpmessage = "Please enter your OS Image ID.")]
+    [ValidatePattern('[A-Z0-9]{3}[A-F0-9]{5}')] [string] $OSImagePackageID
 )
 
 function checkvars{
-# Powershell ParameterSets are a bit weird.
-# I have not yet found a way to make params mandatory based on a switch independant of its set without also making it mandatory when the switch is not active.
-# Example: 
-# 
-#     [Parameter(ParameterSetName="copy", Mandatory=$true, Position = 5, Helpmessage = "Please enter the path of your extracted ISO.")]
-#     [Parameter(ParameterSetName="extract", Mandatory=$true, Position = 5)]
-#     [ValidateNotNullOrEmpty()] [string] $strCopySourcePath,   
-# 
-#  If you enter the PARAMs -doExtract -strExtractPath C:\test you will have to enter strCopySourcePath.
-#  If you set:
-#     [Parameter(ParameterSetName="extract", Mandatory=$false, Position = 5)]
-#
-#  You can enter the PARAMS -doExtract -strExtractPath C:\test BUT of course $strCopySourcePath is no longer mandatory and this breaks the script in case -doCopy is called without dependant parameters.
-#
-# So in conclusion Powershell is weird. I will do some ugly stuff here.
-#
+    # Powershell ParameterSets are a bit weird.
+    # I have not yet found a way to make params mandatory based on a switch independant of its set without also making it mandatory when the switch is not active.
+    # Example: 
+    # 
+    #     [Parameter(ParameterSetName="copy", Mandatory=$true, Position = 5, Helpmessage = "Please enter the path of your extracted ISO.")]
+    #     [Parameter(ParameterSetName="extract", Mandatory=$true, Position = 5)]
+    #     [ValidateNotNullOrEmpty()] [string] $strCopySourcePath,   
+    # 
+    #  If you enter the PARAMs -doExtract -strExtractPath C:\test you will have to enter strCopySourcePath.
+    #  If you set:
+    #     [Parameter(ParameterSetName="extract", Mandatory=$false, Position = 5)]
+    #
+    #  You can enter the PARAMS -doExtract -strExtractPath C:\test BUT of course $strCopySourcePath is no longer mandatory and this breaks the script in case -doCopy is called without dependant parameters.
+    #
+    # So in conclusion Powershell is weird. I will do some ugly stuff here.
+    #
 
-if ($doExtract -and (!$strExtractPath)){
-    Write-Host "I detected an invalid combination of Parameters!"
-    Write-Host "Please use the following Parameters: "
-    Write-Host "-strExtractPath <String>"
-    Exit 0
-}
+    if ($doExtract -and (!$strExtractPath)){
+        Write-Host "I detected an invalid combination of Parameters!"
+        Write-Host "Please use the following Parameters: "
+        Write-Host "-strExtractPath <String>"
+        Exit 0
+    }
 
-if ($doCopy -and (!$strCopySourcePath -or !$strCopyTargetPath)){
-    Write-Host "I detected an invalid combination of Parameters!"
-    Write-Host "Please use the following Parameters: "
-    Write-Host "-strCopySourcePath <String>"
-    Write-Host "-strCopyTargetPath <String>"
-    Exit 0
-}
+    if ($doCopy -and (!$strCopySourcePath -or !$strCopyTargetPath)){
+        Write-Host "I detected an invalid combination of Parameters!"
+        Write-Host "Please use the following Parameters: "
+        Write-Host "-strCopySourcePath <String>"
+        Write-Host "-strCopyTargetPath <String>"
+        Exit 0
+    }
 
-if ($DoModifyTS -and (!$SiteServer -or !$SiteCode -or $TaskSequenceID)){
-    Write-Host "I detected an invalid combination of Parameters!"
-    Write-Host "Please use the following Parameters: "
-    Write-Host "-SiteServer <String>"
-    Write-Host "-SiteCode <String>"
-    Write-Host "-TaskSequenceID <String>"
-    Exit 0
-}
+    if ($DoModifyTS -and (!$SiteServer -or !$SiteCode -or !$TaskSequenceID)){
+        Write-Host "I detected an invalid combination of Parameters!"
+        Write-Host "Please use the following Parameters: "
+        Write-Host "-SiteServer <String>"
+        Write-Host "-SiteCode <String>"
+        Write-Host "-TaskSequenceID <String>"
+        Exit 0
+    }
 
+    if ($DoModifyTS -and !$doAddOSImage -and !$OSImagePackageID){
+        Write-Host "I detected an invalid combination of Parameters!"
+        Write-Host "Please use the following Parameters: "
+        Write-Host "-OSImagePackageID <String>"
+        Exit 0
+    }
 
 }
 
@@ -256,8 +264,9 @@ Function AddOSImage{
     Write-Host "Adding Image " $Name " to SCCM"
     # Requires Testing!
     Write-Host "Currently Disabled. Please do not test this in production!"
-    Write-Host "Enable in Line 265!"
+    Write-Host "Enable in Line 267/268!"
     # New-CMOperatingSystemImage -Name $Name -Path $Path -Version 1.0 -Description $Name -ErrorAction STOP 
+    # return (Get-CMOperatingSystemImage -Name $Name).PackageID
     
     <# We probably won't need this anymore.
     Try{
@@ -274,6 +283,8 @@ Function AddOSImage{
     }
     #>
 
+
+
 }
 
 function modifyTS{
@@ -289,7 +300,9 @@ PARAM(
     [Parameter(Mandatory=$true)]
     [ValidateSet("DE","EN","LTSB", IgnoreCase = $false)] [string] $strLang,
     [Parameter(Mandatory=$true)]
-    [ValidatePattern('[A-Z0-9]{3}[A-F0-9]{5}')] [string] $TaskSequenceID
+    [ValidatePattern('[A-Z0-9]{3}[A-F0-9]{5}')] [string] $TaskSequenceID,
+    [Parameter(Mandatory=$true)]
+    [ValidatePattern('[A-Z0-9]{3}[A-F0-9]{5}')] [string] $newPackageID
 )
 
     # Get SMS_TaskSequencePackage WMI object
@@ -316,7 +329,7 @@ PARAM(
  
     # Update SMS_TaskSequencePackage WMI object
     Write-Host "This is where I would update my Task Sequence but I will not do this in production!"
-    Write-Host "Modify in line 320"
+    Write-Host "Modify in line 333"
     # Invoke-WmiMethod -Namespace "root\SMS\site_$($SiteCode)" -Class SMS_TaskSequencePackage -ComputerName $SiteServer -Name "SetSequence" -ArgumentList @($TaskSequenceResult.TaskSequence, $TaskSequencePackage)
 
 
@@ -371,16 +384,16 @@ gci $strSourcePath\*.iso | foreach{
 
     # Add Image to SCCM
     if ($doaddOSImage){ 
-        AddOsImage -Name $Name -Path $strExtractPath\$Name\sources\install.wim -Version 1.0  
+        $newPackageID = AddOsImage -Name $Name -Path $strExtractPath\$Name\sources\install.wim -Version 1.0  
     }
 
     # Add OS Upgrade Package to SCCM
     # TODO: The SCCM PS Cmdlet currently does not support this.
 
     # Update TaskSequence References
-    # TODO: The SCCM PS Cmdlet currently does not support this.
     if($DoModifyTS){
-        ModifyTS -SiteServer $SiteServer -SiteCode $SiteCode -TaskSequenceID $TaskSequenceID -strBranch $strBranch -strArch $Arch -strLang $Lang -PackageID $TaskSequenceID
+        if($doaddOSImage) { $OSImagePackageID = $newPackageID }
+        ModifyTS -SiteServer $SiteServer -SiteCode $SiteCode -TaskSequenceID $TaskSequenceID -strBranch $strBranch -strArch $Arch -strLang $Lang -TaskSequenceID $TaskSequenceID -newPackageID $OSImagePackageID
     }
 
 
