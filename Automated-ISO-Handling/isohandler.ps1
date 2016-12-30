@@ -1,25 +1,7 @@
 ﻿# Requires -Version 3.0
 # Requires -Modules ConfigurationManager
-#  Please Note: This is currently BETA Software and should not be used in Production before doing some extensive testing.
 #  Import-Module 'C:\Program Files (x86)\Microsoft Configuration Manager\AdminConsole\bin\ConfigurationManager.psd1'
-#  
-# Fully Automated Windows 10 Iso Handling (once you downloaded them)
-# GitHub Version
-#
-# Version: 0.2
-# Author: Klaus Steinhauer
-# Contact: klaus.steinhauer@gmail.com
-# 
-# What it does:
-# - Extract ISOs according to Naming Schema
-# - Copy ISO content to a seperate Directory
-# - Add Operating System Images to SCCM
-# - Modify your TS to update the Image used
-#
-# TODO:
-# - Add Operating System Update Images to SCCM - Currently not supported (AFAIK)
-# - TEST: Modify Task Sequences
-# 
+#  GitHub Version
 # Please Note:
 #  Due to the implemented naming conventions
 #
@@ -39,13 +21,89 @@
 #       [BRANCH] [ARCHITECTURE] [LANG]
 #       Example: "CBB x64 DE"
 #
+#  In order for the doModify Switch to work.
 #  Please **mind the whitespaces**!
 #
 #  As usual your milage may vary and you may want to **edit the StringHandling/ModifyTS function accordingly**!
 #  PS: If anyone finds a way to detect the Branch please let me know.
 #
-# Sample Call:
-# .\isohandler.ps1 -strSourcePath "C:\WindowsImages" -strBranch CBB -doExtract -strExtractPath "\\SERVER\SCCM_SRC\OSD" -doCopy -strCopySourcePath "\\SERVER\SCCM_SRC\OSD" -strCopyTargetPath "\\SERVER2\!OSD" -strUser DMN\USER -strCred PASSWORD -doAddOSImage -
+
+<#
+.SYNOPSIS
+    !This script is still in early alpha. Do not use in production without prior testing!
+    Microsoft is planning to release new Windows 10 Images every 4 months. 
+    Given the potential for error when updating your OSD Task Sequence as well as In-Place-Upgrade TS it seemed a good idea to automate all the steps required post downloading the ISOs.
+.DESCRIPTION
+    Here is what the script can do:
+    - Extract ISO files from a given Path to a given Path
+    - Copy the extracted files to another Path 
+    - Create a new Operating System Image in SCCM from a given Image
+    - Modify a given Task Sequence to use a different Operating System Image
+    - All of the above at once.
+
+    Here is what the script will be able to do once there is a way to do it in PS:
+    - Create a new Operating System Upgrade Image in SCCM
+    - Modify a given (IPU) Task Sequence to use a differen Operating System Upgrade Package
+    - All of the above.
+
+    Please Note: I am by no means a PS expert and this script should be used with caution.
+
+.NOTES
+    File Name: isohandler.ps1
+    Author: Klaus Steinhauer
+    Version: 0.2.1
+
+.PARAMETER SourcePath
+    The Path where you stored your ISO files
+.PARAMETER Branch
+    The Branch of your ISO files [ CB, CBB, LTSB ]
+.PARAMETER doExtract
+    Switch to Extract ISO files
+.PARAMETER ExtractPath
+    The Path where your ISO files should be extracted to.
+    Also used in:
+        -doAddOSImage
+.PARAMETER doCopy
+    Switch to Copy extracted files to another location
+.PARAMETER CopySourcePath
+    The Path where your ISO files have been extracted ( e.g. same as ExtractPath )
+.PARAMETER CopyTargetPath
+    The Target Directory
+.PARAMETER User
+    The Domain\User used to access the target directory
+    Required by:
+        -doExtract
+        -doCopy
+.PARAMETER Cred
+    The Password used to access the target directroy
+    Required by:
+        -doExtract
+        -doCopy
+.PARAMETER doAddOSImage
+    Switch to add new Operating System Image to SCCM    
+.PARAMETER doModifyTS
+    Switch to modify a given Task Sequence in SCCM to use a new Operating System Image
+.PARAMETER SiteServer
+    Your SCCM Site Server FQDN
+.PARAMETER SiteCode
+    Your SCCM Site Code
+.PARAMETER TaskSequenceID
+    The PackageID of the Task Sequence you wish to Modify
+.PARAMETER OSImagePackageID
+    The PackageID of your Operating System Image
+    Required if you did not use the doAddOSImage Switch
+
+.EXAMPLE
+ \\
+Extract:
+isohandler.ps1 -SourcePath C:\isos -Branch CB -doExtract -ExtractPath \\UNCPATH\DIR -User DMN\USER -Cred PASSWORD
+Copy:
+isohandler.ps1 -SourcePath C:\isos -Branch CB -doCopy -CopySourcePath \\UNCPATH\DIR -CopyTargetPath \\UNCPATH2\DIR -User DMN\USER -Cred PASSWORD
+Both:
+isohandler.ps1 -SourcePath C:\isos -Branch CB -doExtract -ExtractPath \\UNCPATH\DIR -doCopy -CopySourcePath \\UNCPATH\DIR -CopyTargetPath \\UNCPATH2\DIR -User DMN\USER -Cred PASSWORD
+Extract, add SCCM OS Image and update a TS:
+isohandler.ps1 -SourcePath C:\isos -Branch CB -doExtract -ExtractPath \\UNCPATH\DIR -User DMN\USER -Cred PASSWORD -doAddOSImage -doModifyTS -SiteServer PS01.local -SiteCode PS1 -TaskSequenceID PS10001A
+#>
 
 [CmdletBinding(DefaultParameterSetName="default")]
 PARAM
@@ -54,21 +112,21 @@ PARAM
     [Parameter(ParameterSetName="default", Mandatory=$true, Position = 0, Helpmessage = "Please enter the Source Path where your ISO files are located.")]
     [Parameter(ParameterSetName="extract", Mandatory=$true, Position = 0)]
     [Parameter(ParameterSetName="copy", Mandatory=$true, Position = 0)]
-    [ValidateNotNullOrEmpty()] [string] $strSourcePath,
+    [ValidateNotNullOrEmpty()] [string] $SourcePath,
     # Branch
     [Parameter(ParameterSetName="default", Mandatory=$true, Position = 1, Helpmessage = "Please enter the Branch of your ISO Files.")]
     [Parameter(ParameterSetName="extract", Mandatory=$true, Position = 1)]
     [Parameter(ParameterSetName="copy", Mandatory=$true, Position = 1)]
     [Parameter(ParameterSetName="OSPackage", Mandatory=$true, Position = 1)] 
     [Parameter(ParameterSetName="TSMod", Mandatory=$true, Position = 1)] 
-    [ValidateSet("CB","CBB","LTSB", IgnoreCase = $true)] [string] $strBranch,
+    [ValidateSet("CB","CBB","LTSB", IgnoreCase = $true)] [string] $Branch,
 
     # Extract ISO
     [Parameter(ParameterSetName="extract", Mandatory=$false, Position = 2, Helpmessage = "Please specify wether you want to extract the isos.")]
     [switch] $doExtract,
     [Parameter(ParameterSetName="extract", Mandatory=$true, Position = 3, Helpmessage = "Please enter the location where the ISO files are to be extracted (must be SCCM Readable for Import).")]
     [Parameter(ParameterSetName="OSPackage", Mandatory=$true, Position = 4)]
-    [ValidateNotNullOrEmpty()] [string] $strExtractPath,    
+    [ValidateNotNullOrEmpty()] [string] $ExtractPath,    
 
     # Copy ISO
     [Parameter(ParameterSetName="copy", Mandatory=$false, Position = 4, Helpmessage = "Please specify wether you want to copy the ISO content to another folder.")]
@@ -76,19 +134,19 @@ PARAM
     [switch] $doCopy,
     [Parameter(ParameterSetName="copy", Mandatory=$true, Position = 5, Helpmessage = "Please enter the path of your extracted ISO.")]
     [Parameter(ParameterSetName="extract", Mandatory=$false, Position = 5)]
-    [ValidateNotNullOrEmpty()] [string] $strCopySourcePath,   
+    [ValidateNotNullOrEmpty()] [string] $CopySourcePath,   
     [Parameter(ParameterSetName="copy", Mandatory=$true, Position = 6, Helpmessage = "Please enter the path where the content should be copied to.")]
     [Parameter(ParameterSetName="extract", Mandatory=$false, Position = 6)]
-    [ValidateNotNullOrEmpty()] [string] $strCopyTargetPath,   
+    [ValidateNotNullOrEmpty()] [string] $CopyTargetPath,   
 
      
     # Credentials
     [Parameter(ParameterSetName="copy", Mandatory=$true, Position = 6, Helpmessage = "Please enter the useraccount with which I should transfer the files (DOMAIN\USER).")] 
     [Parameter(ParameterSetName="extract", Mandatory=$true, Position = 6)]
-    [ValidateNotNullOrEmpty()] [string] $strUser,
+    [ValidateNotNullOrEmpty()] [string] $User,
     [Parameter(ParameterSetName="copy", Mandatory=$true, Position = 7, Helpmessage = "Please enter the password of the useraccount.")]
     [Parameter(ParameterSetName="extract", Mandatory=$true, Position = 7)]
-    [ValidateNotNullOrEmpty()] [string] $strCred,
+    [ValidateNotNullOrEmpty()] [string] $Cred,
 
     # Add OS Package to SCCM
     [Parameter(ParameterSetName="OSPackage", Mandatory=$false, Position = 2, Helpmessage = "Please specify wether you want to add the extracted images to SCCM.")]
@@ -101,60 +159,60 @@ PARAM
     [ValidateNotNullOrEmpty()] [string] $SiteServer,
     [Parameter(ParameterSetName="TSMod", Mandatory=$true, Position = 12, Helpmessage = "Please enter your SiteCode.")]
     [ValidateNotNullOrEmpty()] [string] $SiteCode,
-    [Parameter(ParameterSetName="TSMod", Mandatory=$true, Position = 13, Helpmessage = "Please enter your Task Sequence ID.")]
+    [Parameter(ParameterSetName="TSMod", Mandatory=$true, Position = 13, Helpmessage = "Please enter your Task Sequence Packgage ID.")]
     [ValidatePattern('[A-Z0-9]{3}[A-F0-9]{5}')] [string] $TaskSequenceID,
-    [Parameter(ParameterSetName="TSMod", Mandatory=$false, Position = 14, Helpmessage = "Please enter your OS Image ID.")]
+    [Parameter(ParameterSetName="TSMod", Mandatory=$false, Position = 14, Helpmessage = "Please enter your (new) OS Image Package ID.")]
     [ValidatePattern('[A-Z0-9]{3}[A-F0-9]{5}')] [string] $OSImagePackageID
 )
 
 function checkvars{
-    # Powershell ParameterSets are a bit weird.
-    # I have not yet found a way to make params mandatory based on a switch independant of its set without also making it mandatory when the switch is not active.
-    # Example: 
-    # 
-    #     [Parameter(ParameterSetName="copy", Mandatory=$true, Position = 5, Helpmessage = "Please enter the path of your extracted ISO.")]
-    #     [Parameter(ParameterSetName="extract", Mandatory=$true, Position = 5)]
-    #     [ValidateNotNullOrEmpty()] [string] $strCopySourcePath,   
-    # 
-    #  If you enter the PARAMs -doExtract -strExtractPath C:\test you will have to enter strCopySourcePath.
-    #  If you set:
-    #     [Parameter(ParameterSetName="extract", Mandatory=$false, Position = 5)]
-    #
-    #  You can enter the PARAMS -doExtract -strExtractPath C:\test BUT of course $strCopySourcePath is no longer mandatory and this breaks the script in case -doCopy is called without dependant parameters.
-    #
-    # So in conclusion Powershell is weird. I will do some ugly stuff here.
-    #
+# Powershell ParameterSets are a bit weird.
+# I have not yet found a way to make params mandatory based on a switch independant of its set without also making it mandatory when the switch is not active.
+# Example: 
+# 
+#     [Parameter(ParameterSetName="copy", Mandatory=$true, Position = 5, Helpmessage = "Please enter the path of your extracted ISO.")]
+#     [Parameter(ParameterSetName="extract", Mandatory=$true, Position = 5)]
+#     [ValidateNotNullOrEmpty()] [string] $CopySourcePath,   
+# 
+#  If you enter the PARAMs -doExtract -ExtractPath C:\test you will have to enter CopySourcePath.
+#  If you set:
+#     [Parameter(ParameterSetName="extract", Mandatory=$false, Position = 5)]
+#
+#  You can enter the PARAMS -doExtract -ExtractPath C:\test BUT of course $CopySourcePath is no longer mandatory and this breaks the script in case -doCopy is called without dependant parameters.
+#
+# So in conclusion Powershell is weird. I will do some ugly stuff here.
+#
 
-    if ($doExtract -and (!$strExtractPath)){
-        Write-Host "I detected an invalid combination of Parameters!"
-        Write-Host "Please use the following Parameters: "
-        Write-Host "-strExtractPath <String>"
-        Exit 0
-    }
+if ($doExtract -and (!$ExtractPath)){
+    Write-Host "I detected an invalid combination of Parameters!"
+    Write-Host "Please use the following Parameters: "
+    Write-Host "-ExtractPath <String>"
+    Exit 0
+}
 
-    if ($doCopy -and (!$strCopySourcePath -or !$strCopyTargetPath)){
-        Write-Host "I detected an invalid combination of Parameters!"
-        Write-Host "Please use the following Parameters: "
-        Write-Host "-strCopySourcePath <String>"
-        Write-Host "-strCopyTargetPath <String>"
-        Exit 0
-    }
+if ($doCopy -and (!$CopySourcePath -or !$CopyTargetPath)){
+    Write-Host "I detected an invalid combination of Parameters!"
+    Write-Host "Please use the following Parameters: "
+    Write-Host "-CopySourcePath <String>"
+    Write-Host "-CopyTargetPath <String>"
+    Exit 0
+}
 
-    if ($DoModifyTS -and (!$SiteServer -or !$SiteCode -or !$TaskSequenceID)){
-        Write-Host "I detected an invalid combination of Parameters!"
-        Write-Host "Please use the following Parameters: "
-        Write-Host "-SiteServer <String>"
-        Write-Host "-SiteCode <String>"
-        Write-Host "-TaskSequenceID <String>"
-        Exit 0
-    }
+if ($DoModifyTS -and (!$SiteServer -or !$SiteCode -or !$TaskSequenceID)){
+    Write-Host "I detected an invalid combination of Parameters!"
+    Write-Host "Please use the following Parameters: "
+    Write-Host "-SiteServer <String>"
+    Write-Host "-SiteCode <String>"
+    Write-Host "-TaskSequenceID <String>"
+    Exit 0
+}
 
-    if ($DoModifyTS -and !$doAddOSImage -and !$OSImagePackageID){
-        Write-Host "I detected an invalid combination of Parameters!"
-        Write-Host "Please use the following Parameters: "
-        Write-Host "-OSImagePackageID <String>"
-        Exit 0
-    }
+if ($DoModifyTS -and !$doAddOSImage -and !$OSImagePackageID){
+    Write-Host "I detected an invalid combination of Parameters!"
+    Write-Host "Please use the following Parameters: "
+    Write-Host "-OSImagePackageID <String>"
+}
+
 
 }
 
@@ -163,38 +221,40 @@ function MountDir{
         [Parameter(Mandatory=$true, Helpmessage = "Please enter the location where the ISO files are to be extracted (must be SCCM Readable for Import).")]
         [ValidateNotNullOrEmpty()] [string] $TargetPath,
         [Parameter(Mandatory=$true, Helpmessage = "Please enter the useraccount with which I should transfer the files (DOMAIN\USER).")] 
-        [ValidateNotNullOrEmpty()] [string] $strUser,
+        [ValidateNotNullOrEmpty()] [string] $User,
         [Parameter(Mandatory=$true, Helpmessage = "Please enter the password of the useraccount.")]
-        [ValidateNotNullOrEmpty()] [string] $strCred
+        [ValidateNotNullOrEmpty()] [string] $Cred
     )
 
     # mount target directory
-    net use $TargetPath $strCred /USER:$strUser
+
+    net use $TargetPath $Cred /USER:$User
+
 }
 
 function StringHandling{
     # Hier wirds hässlich, aufgrund unserer Namenskonvention vs der von MS
     PARAM(
         [Parameter(Mandatory = $true, HelpMessage = "Please enter the filename")]
-        [ValidateNotNullOrEmpty()] [string] $strFileName,
+        [ValidateNotNullOrEmpty()] [string] $FileName,
         [Parameter(Mandatory = $true, HelpMessage = "Tell me what you want.")]
         [ValidateSet("ALL","ARCH","LANG", IgnoreCase = $true)] [string] $desiredString
     )
 
-    $strBase = $strFileName 
-    $strVersion = $strBase.Split("_")[5].Insert(2,".")
+    $Base = $FileName 
+    $Version = $Base.Split("_")[5].Insert(2,".")
     # Language
-    $strLang = $strBase.Split("_")[7]
-    if ($strLang -eq "English") {$strLang = "EN"} else {$strLang = "DE"}
+    $Lang = $Base.Split("_")[7]
+    if ($Lang -eq "English") {$Lang = "EN"} else {$Lang = "DE"}
     # Architecture
-    $strArch = $strBase.Split("_")[6].Split("BIT")[0]
-    if ($strArch -eq "32"){$strArch = "86"}
+    $Arch = $Base.Split("_")[6].Split("BIT")[0]
+    if ($Arch -eq "32"){$Arch = "86"}
 
     
     Switch ($desiredString){
-        ALL  { return "Windows10_"+$strVersion+"_"+$strBranch+"_x"+$strArch+"_"+$strLang }
-        ARCH { return $strArch }
-        LANG { return $strLang }
+        ALL  { return "Windows10_"+$Version+"_"+$Branch+"_x"+$Arch+"_"+$Lang }
+        ARCH { return $Arch }
+        LANG { return $Lang }
     }
 
 
@@ -202,23 +262,23 @@ function StringHandling{
 
 function Extract{
     PARAM(
-        [Parameter(Mandatory=$true, Helpmessage = "Please enter the Source Path where your ISO files are located.")]
-        [ValidateScript({ Test-Path $_ })] [string] $strSourcePath,
+        [Parameter(Mandatory=$true, Helpmessage = "Please enter the root Source Path where your ISO files are located.")]
+        [ValidateScript({ Test-Path $_ })] [string] $SourcePath,
         [Parameter(Mandatory=$true, Helpmessage = "Please enter the location where the ISO files are to be extracted (must be SCCM Readable for Import).")]
-        [ValidateScript({ Test-Path $_ })] [string] $strExtractPath, 
-        [Parameter(Mandatory = $true, HelpMessage = "Please enter the File Name")]
+        [ValidateScript({ Test-Path $_ })] [string] $ExtractPath, 
+        [Parameter(Mandatory = $true, HelpMessage = "Please enter the Folder Name")]
         [ValidateNotNullOrEmpty()] [string] $Name
     )
 
     #Create Target Folder
-    New-Item -ItemType directory -Force -Path $strExtractPath\$Name | Out-Null 
+    New-Item -ItemType directory -Force -Path $ExtractPath\$Name | Out-Null 
     # Mount Iso Image
-    $Mount = Mount-DiskImage -PassThru -ImagePath $strSourcePath 
+    $Mount = Mount-DiskImage -PassThru -ImagePath $SourcePath 
     # Get Driveletter
     $driveletter = (Get-Volume -DiskImage $Mount).driveletter
-    # Write-Host "Copying Files from Image " $strSourcePath " to " $strExtractPath\$Name
+    # Write-Host "Copying Files from Image " $SourcePath " to " $ExtractPath\$Name
     # Copy Files
-    Copy-Item $driveletter":\" -Destination $strExtractPath\$Name -Recurse -Force 
+    Copy-Item $driveletter":\" -Destination $ExtractPath\$Name -Recurse -Force 
     # Write-Host "Dismounting Image."
     # Dismount Image
     Dismount-DiskImage $Mount.ImagePath
@@ -229,19 +289,19 @@ function CopyISO{
         # Source DIR is where the ISO was extracted.
         [Parameter(Mandatory=$true, Helpmessage = "Please enter the location where the files will be copied from.")]
         #[ValidateScript({ Test-Path $_ })] 
-        [string] $strSourceDirectory,
+        [string] $SourceDirectory,
         [Parameter(Mandatory=$true, Helpmessage = "Please enter the location where the files will be copied to.")]
         #[ValidateScript({ Test-Path $_ })] 
-        [string] $strTargetDirectory, 
-        [Parameter(Mandatory = $true, HelpMessage = "Please enter the File Name")]
+        [string] $TargetDirectory, 
+        [Parameter(Mandatory = $true, HelpMessage = "Please enter the Folder Name")]
         [ValidateNotNullOrEmpty()] [string] $Name
     )
 
     # Create Target Directory
-    New-Item -ItemType directory -Force -Path $strCopyPath\$Name | Out-Null 
-    # Write-Host "Copying Files from Image " $strSourcePath " to " $strCopyPath
+    New-Item -ItemType directory -Force -Path $CopyPath\$Name | Out-Null 
+    # Write-Host "Copying Files from Image " $SourcePath " to " $CopyPath
     # Copy Files
-    Copy-Item $strExtractPath\$Name -Destination $strCopyPath -Recurse -Force 
+    Copy-Item $ExtractPath\$Name -Destination $CopyPath -Recurse -Force 
 
 }
 
@@ -250,7 +310,7 @@ Function AddOSImage{
     PARAM(
         [Parameter(Mandatory = $True, HelpMessage = "Please enter OS Image Name")]
         [ValidateNotNullOrEmpty()] [string] $Name,
-        [Parameter(Mandatory = $True, HelpMessage = "Please enter OS Image WIM location")]
+        [Parameter(Mandatory = $True, HelpMessage = "Please enter OS Image WIM image location")]
         [ValidateScript({ Test-Path $_ })] [string] $Path,
         [Parameter(Mandatory = $False, HelpMessage = "Please enter OS Image version")]
         [ValidateNotNullOrEmpty()] [string] $Version
@@ -264,8 +324,8 @@ Function AddOSImage{
     Write-Host "Adding Image " $Name " to SCCM"
     # Requires Testing!
     Write-Host "Currently Disabled. Please do not test this in production!"
-    Write-Host "Enable in Line 267/268!"
-    # New-CMOperatingSystemImage -Name $Name -Path $Path -Version 1.0 -Description $Name -ErrorAction STOP 
+    Write-Host "Enable in Lines 331/332"
+    # $OSImage = New-CMOperatingSystemImage -Name $Name -Path $Path -Version 1.0 -Description $Name -ErrorAction STOP 
     # return (Get-CMOperatingSystemImage -Name $Name).PackageID
     
     <# We probably won't need this anymore.
@@ -283,26 +343,25 @@ Function AddOSImage{
     }
     #>
 
-
-
 }
 
 function modifyTS{
 PARAM(
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$true, Helpmessage = "Please enter the FQDN of your SCCM Site Server.")]
     [ValidateNotNullOrEmpty()] [string] $SiteServer,
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$true, Helpmessage = "Please enter your SiteCode.")]
     [ValidateNotNullOrEmpty()] [string] $SiteCode,
-    [Parameter(Mandatory=$true)]
-    [ValidateSet("CB","CBB","LTSB", IgnoreCase = $true)] [string] $strBranch,
-    [Parameter(Mandatory=$true)]
-    [ValidateSet("x86","x64", IgnoreCase = $true)] [string] $strArch,
-    [Parameter(Mandatory=$true)]
-    [ValidateSet("DE","EN","LTSB", IgnoreCase = $false)] [string] $strLang,
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$true, Helpmessage = "Please enter the Branch of your ISO Files.")]
+    [ValidateSet("CB","CBB","LTSB", IgnoreCase = $true)] [string] $Branch,
+    [Parameter(Mandatory=$true, Helpmessage = "Please enter the Architecture of your OS Image")]
+    [ValidateSet("x86","x64", IgnoreCase = $true)] [string] $Arch,
+    [Parameter(Mandatory=$true, Helpmessage = "Please enter the Language of your OS Image")]
+    [ValidateSet("DE","EN", IgnoreCase = $false)] [string] $Lang,
+    [Parameter(Mandatory=$true, Helpmessage = "Please enter your Task Sequence Package ID.")]
     [ValidatePattern('[A-Z0-9]{3}[A-F0-9]{5}')] [string] $TaskSequenceID,
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$true, Helpmessage = "Please enter your (new) OS Image Package ID.")]
     [ValidatePattern('[A-Z0-9]{3}[A-F0-9]{5}')] [string] $newPackageID
+
 )
 
     # Get SMS_TaskSequencePackage WMI object
@@ -317,11 +376,11 @@ PARAM(
     [XML]$TaskSequenceXML = $TaskSequenceResult.ReturnValue
 
     # Select Matching OS
-    $OldNode = $TaskSequenceXML.SelectSingleNode("//step[contains(@name,'$strBranch $strArch $strLang')]")
+    $OldNode = $TaskSequenceXML.SelectSingleNode("//step[contains(@name,'$Branch $Arch $Lang')]")
     # Replace Package ID in Variable List
-    $OldNode.LastChild.ChildNodes.Item(1)."#text" = $newID
+    $OldNode.LastChild.ChildNodes.Item(1)."#text" = $newPackageID
     # And in the Upgrade Command.
-    $OldNode.action = $OldNode.action -replace("[A-Z0-9]{3}[A-F0-9]{5}",$newID)
+    $OldNode.action = $OldNode.action -replace("[A-Z0-9]{3}[A-F0-9]{5}",$newPackageID)
 
 
     # Convert XML back to SMS_TaskSequencePackage WMI object
@@ -329,78 +388,55 @@ PARAM(
  
     # Update SMS_TaskSequencePackage WMI object
     Write-Host "This is where I would update my Task Sequence but I will not do this in production!"
-    Write-Host "Modify in line 333"
+    Write-Host "Modify in line 395"
     # Invoke-WmiMethod -Namespace "root\SMS\site_$($SiteCode)" -Class SMS_TaskSequencePackage -ComputerName $SiteServer -Name "SetSequence" -ArgumentList @($TaskSequenceResult.TaskSequence, $TaskSequencePackage)
 
 
 
 }
 
-
-<#
-# DEBUGGING!
-Write-Host ""
-Write-Host "PARAM:"
-Write-Host "strSourcePath" $strSourcePath
-Write-Host "strBranch" $strBranch
-Write-Host "doExtract" $doExtract
-Write-Host "strExtractPath" $strExtractPath
-Write-Host "doCopy" $doCopy
-Write-Host "strCopySourcePath" $strCopySourcePath
-Write-Host "strCopyTargetPath" $strCopyTargetPath
-Write-Host "strUser" $strUser
-Write-Host "strCred" $strCred
-Write-Host "doAddOSImage" $doAddOSImage
-Write-Host "SiteServer" $SiteServer
-Write-Host "SiteCode" $SiteCode
-
-#Exit 0
-
-# /DEBUGGING!
-#>
-
 checkvars
 
-gci $strSourcePath\*.iso | foreach{
+gci $SourcePath\*.iso | foreach{
 
     Write-Host "Found ISO: " $_.Name
     # Get the Name
-    $Name = StringHandling -strFileName $_.Name -desiredString ALL
-    $Arch = StringHandling -strFileName $_.Name -desiredString ARCH
-    $Lang = StringHandling -strFileName $_.Name -desiredString LANG
+    $Name = StringHandling -FileName $_.Name -desiredString ALL
+    $Arch = StringHandling -FileName $_.Name -desiredString ARCH
+    $Lang = StringHandling -FileName $_.Name -desiredString LANG
 
     # Extract the Iso and optionally copy it to another path.
     if ($doExtract){ 
-        MountDir -TargetPath $strExtractPath -strUser $strUser -strCred $strCred
-        Extract -strSourcePath $_.FullName -strExtractPath $strExtractPath -Name $Name
+        MountDir -TargetPath $ExtractPath -User $User -Cred $Cred
+        Extract -SourcePath $_.FullName -ExtractPath $ExtractPath -Name $Name
     }
 
     if ($doCopy){
         # Mount Copy Destination
-        MountDir -TargetPath $strCopyTargetPath -strUser $strUser -strCred $strCred
+        MountDir -TargetPath $CopyTargetPath -User $User -Cred $Cred
         # Copy Files
-        CopyISO -strSourceDirectory $strCopySourcePath -strTargetDirectory $strCopyTargetPath -Name $Name
+        CopyISO -SourceDirectory $CopySourcePath -TargetDirectory $CopyTargetPath -Name $Name
     }
-
     # Add Image to SCCM
     if ($doaddOSImage){ 
-        $newPackageID = AddOsImage -Name $Name -Path $strExtractPath\$Name\sources\install.wim -Version 1.0  
+        $newPackageID = AddOsImage -Name $Name -Path $ExtractPath\$Name\sources\install.wim -Version 1.0  
     }
 
     # Add OS Upgrade Package to SCCM
     # TODO: The SCCM PS Cmdlet currently does not support this.
 
     # Update TaskSequence References
+    # TODO: The SCCM PS Cmdlet currently does not support this.
     if($DoModifyTS){
         if($doaddOSImage) { $OSImagePackageID = $newPackageID }
-        ModifyTS -SiteServer $SiteServer -SiteCode $SiteCode -TaskSequenceID $TaskSequenceID -strBranch $strBranch -strArch $Arch -strLang $Lang -TaskSequenceID $TaskSequenceID -newPackageID $OSImagePackageID
-    }
-
-
-    if ($doExtract -or $doCopy){
-        if (Test-Path $strExtractPath) { net use $strExtractPath /delete }
-        if (Test-Path $strCopyTargetPath) { net use $strCopyTargetPath /delete }
+        ModifyTS -SiteServer $SiteServer -SiteCode $SiteCode -TaskSequenceID $TaskSequenceID -Branch $Branch -Arch $Arch -Lang $Lang -TaskSequenceID $TaskSequenceID -newPackageID $OSImagePackageID
     }
 
 }
+
+if ($doExtract -or $doCopy){
+    if (Test-Path $ExtractPath) { net use $ExtractPath /delete }
+    if (Test-Path $CopyTargetPath) { net use $CopyTargetPath /delete }
+}
+
 Write-Host "Finished Proecessing all ISOs."
