@@ -178,7 +178,7 @@ function checkvars{
 #  If you set:
 #     [Parameter(ParameterSetName="extract", Mandatory=$false, Position = 5)]
 #
-#  You can enter the PARAMS -doExtract -ExtractPath C:\test BUT of course $CopySourcePath is no longer mandatory and this breaks the script in case -doCopy is called without dependant parameters.
+#  You can enter the PARAMS -doExtract -ExtractPath C:\test BUT of course $CopySourcePath is no longer mandatory and this breaks the script in case -doCopy is called without it's dependant parameters.
 #
 # So in conclusion Powershell is weird. I will do some ugly stuff here.
 #
@@ -322,9 +322,13 @@ Function AddOSImage{
         #>
     )
     Write-Host "Adding Image " $Name " to SCCM"
+    # https://gallery.technet.microsoft.com/scriptcenter/Display-the-source-98d77c8e
+    If((Get-Location).Drive.Name -ne $SiteCode){ 
+            Try{Set-Location -path "($SiteCode):" -ErrorAction Stop} 
+            Catch{Throw "Unable to connect to Site $SiteCode. Ensure that the Site Code is correct and that you have access."} 
     # Requires Testing!
     Write-Host "Currently Disabled. Please do not test this in production!"
-    Write-Host "Enable in Lines 331/332"
+    Write-Host "Enable in Lines 332/333"
     # $OSImage = New-CMOperatingSystemImage -Name $Name -Path $Path -Version 1.0 -Description $Name -ErrorAction STOP 
     # return (Get-CMOperatingSystemImage -Name $Name).PackageID
     
@@ -388,7 +392,7 @@ PARAM(
  
     # Update SMS_TaskSequencePackage WMI object
     Write-Host "This is where I would update my Task Sequence but I will not do this in production!"
-    Write-Host "Modify in line 395"
+    Write-Host "Modify in line 396"
     # Invoke-WmiMethod -Namespace "root\SMS\site_$($SiteCode)" -Class SMS_TaskSequencePackage -ComputerName $SiteServer -Name "SetSequence" -ArgumentList @($TaskSequenceResult.TaskSequence, $TaskSequencePackage)
 
 
