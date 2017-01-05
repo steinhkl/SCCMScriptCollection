@@ -298,10 +298,10 @@ function CopyISO{
     )
 
     # Create Target Directory
-    New-Item -ItemType directory -Force -Path $CopyPath\$Name | Out-Null 
+    New-Item -ItemType directory -Force -Path $TargetDirectory\$Name | Out-Null 
     # Write-Host "Copying Files from Image " $SourcePath " to " $CopyPath
     # Copy Files
-    Copy-Item $ExtractPath\$Name -Destination $CopyPath -Recurse -Force 
+    Copy-Item $SourceDirectory\$Name -Destination $TargetDirectory -Recurse -Force 
 
 }
 
