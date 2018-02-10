@@ -6,37 +6,6 @@ Import-Module ConfigrationManager
 # Author: Klaus Steinhauer
 # Version: 0.4
 # Chagelog: Implement All the new SCCM PS Cmdlets!
-# Please Note:
-#  Due to the implemented naming conventions
-#
-#  The folders containing the files will be named as follows:
-#      Windows10_[RELEASE]_[BRANCH]_[ARCHITECTURE]_[LANGUAGE]
-#
-#      Exanmple : Windows10_16.07_CB_x64_EN
-#
-#  The Script also assumes you will use the Languages English and German.
-#  Accordingly, when downloaded with German Locale, this is what the Isos are named like:
-#
-#  SW_DVD5_WIN_ENT_10_1607_64BIT_English_MLF_X21-07102.ISO
-#
-#  As of 16.07CBB Microsoft has Changed the Name of the ISO file to:
-#
-#  SW_DVD5_WIN_ENT_10_1607.1_64BIT_English_MLF_X21-27030.ISO
-#
-#  Either Rename the ISO or expect the new OS Images in SCCM to be named as such:
-#
-#  Windows10_16.07.1_CB_x64_EN
-#
-#  Please also Note:
-#  Your Apply Operating System Step Must be Named as follows:
-#
-#       [BRANCH] [ARCHITECTURE] [LANG]
-#       Example: "CBB x64 DE"
-#
-#  In order for the  to work.
-#  Please **mind the whitespaces**!
-#
-#  As usual your milage may vary and you may want to **edit the Set-CMTSStepApplyOperatingSystem function accordingly**!
 
 ## Hardcoded Vars
 $SourcePath = "\\YOUR\ISO\SOURCE\FOLDER"
@@ -44,7 +13,6 @@ $Branch = "CB" # will probably be removed in the future.
 $User = "DOM\USERNAME"
 $Cred = "PASSWORD"
 $ExtractPath = "\\YOUR\SCCM\Destination"
-#$CopyTargetPath = "\\YOUR\SETUPSCAN\Destination"
 $SiteCode = "CMG"
 $InstallTSID = "CMG00002" # Your AIO Install TS
 $UpgradeTSID = "CMG00002" # Your AIO Upgrade TS
@@ -53,7 +21,6 @@ Set-Location C:
 
 # Mount Target Directories.
 net use $ExtractPath $Cred /USER:$User
-#net use $CopyTargetPath $Cred /USER:$User
 
 Get-Childitem $SourcePath\*.iso | ForEach-Object{
     Write-Output "Found ISO: $_.Name"
@@ -73,10 +40,6 @@ Get-Childitem $SourcePath\*.iso | ForEach-Object{
     $source = (Get-Volume -DiskImage (Mount-DiskImage -PassThru -ImagePath $SourcePath)).DriveLetter + ":\"
     # Copy Files
     Get-ChildItem -Path $source | Copy-Item -Destination $ExtractPath\$Name -Recurse -Force
-    <# Copy to an additional Server for reasons.
-    New-Item -ItemType directory -Force -Path $CopyTargetPath\$Name | Out-Null
-    Get-ChildItem -Path $source | Copy-Item -Destination $CopyTargetPath\$Name -Recurse -Force
-    #>
     # Dismount Image
     Dismount-DiskImage -ImagePath $SourcePath
 
@@ -104,7 +67,4 @@ Get-Childitem $SourcePath\*.iso | ForEach-Object{
 
 
 if (Test-Path $ExtractPath) { net use $ExtractPath /delete }
-#if (Test-Path $CopyTargetPath) { net use $CopyTargetPath /delete }
-
-
 Write-Output "Finished Proecessing all ISOs."
