@@ -34,3 +34,7 @@ Your Apply Operating System Step(s) / Install Upgrade Package Step(s) Must be Na
 
     [BRANCH] [ARCHITECTURE] [LANG]
     Example: "CBB x64 DE"
+
+**Support**
+
+You can reach me at contact@steinhkl.de for support.
