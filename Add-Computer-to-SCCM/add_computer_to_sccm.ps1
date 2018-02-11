@@ -16,11 +16,11 @@ $filepath="F:\SCCM_Import\CSVImport\"
 $backuppath="F:\SCCM_Import\CSVImportBackup\"
 $WMInamespace = "root\sms\site_CMG"
 $SiteServer = "s0001.yourdomain.com"
-
+$DefaultCollection = "YOUR-DEFAULT-COLLECTION"
 $runtime=Get-Date -Format yyyyMMddHHmm
 $logfile=$backuppath+$runtime+".log"
 $resource = $false
-$DefaultCollection = "YOUR-DEFAULT-COLLECTION"
+
 
 # Check CSV file format.
 function checkFormat ($importfile){
