@@ -39,3 +39,4 @@ You can reach me at contact@steinhkl.de for support.
 **Additional Note**
 
 This script supports an edge case: Making manually installed computers run a task sequence when joining the domain in order to ensure compliance. It is yet to be documented.
+See DomainJoin Folder.
