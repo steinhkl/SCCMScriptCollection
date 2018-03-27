@@ -4,8 +4,8 @@
 Import-Module ConfigrationManager
 # GitHub Version
 # Author: Klaus Steinhauer
-# Version: 0.4
-# Chagelog: Implement All the new SCCM PS Cmdlets!
+# Version: 0.4.1
+# Chagelog: Fix some bugs
 
 ## Hardcoded Vars
 $SourcePath = "\\YOUR\ISO\SOURCE\FOLDER"
@@ -21,6 +21,7 @@ Set-Location C:
 
 # Mount Target Directories.
 net use $ExtractPath $Cred /USER:$User
+net use $SourcePath $Cred /USER:$User
 
 Get-Childitem $SourcePath\*.iso | ForEach-Object{
     Write-Output "Found ISO: $_.Name"
@@ -29,19 +30,22 @@ Get-Childitem $SourcePath\*.iso | ForEach-Object{
     # Get the Version, Architecture, Language and Full desired name.
     $Version = $Basename.Split("_")[5].Insert(2,".")
     $Arch = @{$true = 'x86'; $false = 'x64' }['x'+$Basename.Split("_")[6].Split("BIT")[0] -eq "x32"]
-    $Lang = @{$true = 'EN'; $false = 'DE' }[$Basename.Split("_")[7] -eq "EN"]
+    $Lang = @{$true = 'EN'; $false = 'DE' }[$Basename.Split("_")[7] -eq "English"]
     $Name = "Windows10_"+$Version+"_"+$Branch+"_"+$Arch+"_"+$Lang
     $CMTsStepName = "$Branch $Arch $Lang"
 
-
-    #Create Target Extract Folder
+    # Create Target Extract Folder
     New-Item -ItemType directory -Force -Path $ExtractPath\$Name | Out-Null
     # Mount and get Driveletter
-    $source = (Get-Volume -DiskImage (Mount-DiskImage -PassThru -ImagePath $SourcePath)).DriveLetter + ":\"
+    $source = (Get-Volume -DiskImage (Mount-DiskImage -PassThru -ImagePath $_ -ErrorAction Stop)).DriveLetter + ":\"
+
+    Write-Output "Beginning to copy files from ISO."
     # Copy Files
     Get-ChildItem -Path $source | Copy-Item -Destination $ExtractPath\$Name -Recurse -Force
+    Write-Output "Finished copying files."
+
     # Dismount Image
-    Dismount-DiskImage -ImagePath $SourcePath
+    Dismount-DiskImage -ImagePath $_.FullName
 
     # Switch to CFGMGr Drive
     If((Get-Location).Drive.Name -ne $SiteCode){
@@ -49,22 +53,26 @@ Get-Childitem $SourcePath\*.iso | ForEach-Object{
             Catch{Throw "Unable to connect to Site $SiteCode. Ensure that the Site Code is correct and that you have access."}
           }
     # Import Image into SCCM
-    New-CMOperatingSystemImage -Name $Name -Path $ExtractPath\$Name\sources\install.wim -Version 1.0 -Description $Name -ErrorAction STOP
+    Write-Output "Importing and enabling new Operating System Image"
+    New-CMOperatingSystemImage -Name $Name -Path $ExtractPath\$Name\sources\install.wim -Version 1.0 -Description $Name -ErrorAction STOP | Out-Null
     $CMOperatingSystemImagePackage = (Get-CMOperatingSystemImage -Name $Name)
 
     # Replace corresponding TS Step.
-    Set-CMTSStepApplyOperatingSystem -TaskSequenceId $InstallTSID  -StepName $CMTsStepName -ImagePackage $CMOperatingSystemImagePackage -PackageIndex 1
+    Set-CMTSStepApplyOperatingSystem -TaskSequenceId $InstallTSID  -StepName $CMTsStepName -ImagePackage $CMOperatingSystemImagePackage -ImagePackageIndex 3 -DestinationVariable "OSDrive" -ErrorAction Stop
 
     # Add OS Upgrade Package to SCCM
-    New-CMOperatingSystemUpgradePackage -Name $Name -Path $ExtractPath\$Name\ -Version 1.0 -Description $Name -ErrorAction STOP
+    Write-Output "Importing and enabling new Operating System Upgrade Package"
+    New-CMOperatingSystemUpgradePackage -Name $Name -Path $ExtractPath\$Name\ -Version 1.0 -Description $Name -ErrorAction STOP | Out-Null
     $CMOperatingSystemUpgradePackage = (Get-CMOperatingSystemUpgradePackage -Name $Name)
 
     # Replace corresponding TS Step.
-    Set-CMTSStepApplyOperatingSystem -TaskSequenceId $UpgradeTSID  -StepName $CMTsStepName -InstallPackage $CMOperatingSystemUpgradePackage -InstallPackageIndex 1
+    Set-CMTSStepApplyOperatingSystem -TaskSequenceId $UpgradeTSID  -StepName $CMTsStepName -InstallPackage $CMOperatingSystemUpgradePackage -InstallPackageIndex 3 -ErrorAction Stop
 
     Set-Location C:
 }
-
+Write-Output "Finished Proecessing all ISOs."
+Write-Output "Please make sure to distribute content and check your TS for successfull exchange of the OS images."
 
 if (Test-Path $ExtractPath) { net use $ExtractPath /delete }
-Write-Output "Finished Proecessing all ISOs."
+if (Test-Path $SourcePath) { net use $SourcePath /delete }
+
