@@ -1,7 +1,6 @@
 #Requires -Version 4.0
 #Requires -RunAsAdministrator
-#Requires -Modules ConfigurationManager
-Import-Module ConfigrationManager
+Import-Module 'C:\Program Files (x86)\Microsoft Configuration Manager\AdminConsole\bin\ConfigurationManager.psd1' -Force -ErrorAction Stop
 # GitHub Version
 # Author: Klaus Steinhauer
 # Version: 0.4.1
