@@ -68,9 +68,9 @@ if (!(Test-Path $strSetupPath)){
 Start-Process -FilePath "$strSetupPath" -ArgumentList "/Auto Upgrade /noreboot /DynamicUpdate Enable /quiet /copylogs $strLogDestination /compat ScanOnly" -Wait -NoNewWindow
 
 # Get the relevant Line from LogFile
-$strResult = Get-Content $strLogDestination\Panther\setupact.log | ? {($_ | Select-String "0xC19002") -and ($_ | Select-String "SetupHost::Execute")}
+$strResult = Get-Content C:\Windows\Logs\MoSetup\bluebox.log | ? {($_ | Select-String "0xC19002") -and ($_ | Select-String "MainHR: Error")}
 # Get The Exit Code
-$exitCode = $strResult.Substring(85)
+$exitCode = $strResult.Substring(37)[-1]
 
 Write-Host $exitCode
 # Generate Logfile ouput and write it to file.
