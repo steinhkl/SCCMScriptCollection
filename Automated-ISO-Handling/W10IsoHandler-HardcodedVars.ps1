@@ -3,7 +3,7 @@
 Import-Module 'C:\Program Files (x86)\Microsoft Configuration Manager\AdminConsole\bin\ConfigurationManager.psd1' -Force -ErrorAction Stop
 # GitHub Version
 # Author: Klaus Steinhauer
-# Version: 0.4.1
+# Version: 0.4.2
 # Chagelog: Fix some bugs
 
 ## Hardcoded Vars
@@ -27,9 +27,9 @@ Get-Childitem $SourcePath\*.iso | ForEach-Object{
     $Basename = $_.Name
 
     # Get the Version, Architecture, Language and Full desired name.
-    $Version = $Basename.Split("_")[5].Insert(2,".")
-    $Arch = @{$true = 'x86'; $false = 'x64' }['x'+$Basename.Split("_")[6].Split("BIT")[0] -eq "x32"]
-    $Lang = @{$true = 'EN'; $false = 'DE' }[$Basename.Split("_")[7] -eq "English"]
+    $Version = $Basename.Split("_")[8].Insert(2,".")
+    $Arch = @{$true = 'x86'; $false = 'x64' }[$Basename.Split("_")[9].Split("BIT")[0] -eq "32"]
+    $Lang = @{$true = 'EN'; $false = 'DE' }[$Basename.Split("_")[10] -eq "English"]
     $Name = "Windows10_"+$Version+"_"+$Branch+"_"+$Arch+"_"+$Lang
     $CMTsStepName = "$Branch $Arch $Lang"
 
@@ -65,7 +65,7 @@ Get-Childitem $SourcePath\*.iso | ForEach-Object{
     $CMOperatingSystemUpgradePackage = (Get-CMOperatingSystemUpgradePackage -Name $Name)
 
     # Replace corresponding TS Step.
-    Set-CMTSStepApplyOperatingSystem -TaskSequenceId $UpgradeTSID  -StepName $CMTsStepName -InstallPackage $CMOperatingSystemUpgradePackage -InstallPackageIndex 3 -ErrorAction Stop
+    Set-CMTSStepUpgradeOperatingSystem -TaskSequenceId $UpgradeTSID -StepName $CMTsStepName -UpgradePackage $CMOperatingSystemUpgradePackage -EditionIndex 1 -SetupTimeout 360 -IgnoreMessage $True -DynamicUpdateSetting OverridePolicy -ErrorAction Stop
 
     Set-Location C:
 }
